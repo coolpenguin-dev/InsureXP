@@ -45,6 +45,14 @@ This starts **Nest** on `http://localhost:4000` and **Next.js** on `http://local
 
 `npm start` is an alias for `npm run dev`.
 
+### `ERR_CONNECTION_REFUSED` on login (port 4000)
+
+The UI calls `http://localhost:4000/api`. If the browser shows connection refused, the **API process is not listening**—usually because Nest failed during startup.
+
+1. Watch the **`[api]`** lines in the same terminal as `npm run dev`. You should see **`Nest application successfully started`** and no repeating TypeORM errors.
+2. Ensure **`backend/.env`** exists with a valid **`DATABASE_URL`** and that **PostgreSQL is running** with the schema applied (see [Database setup](#database-setup)).
+3. If you only see **`[web]`** logs or the api process exits, fix the backend error first, then restart `npm run dev`.
+
 ### Next.js dev errors on Windows (`ENOENT` / `_buildManifest.js.tmp`)
 
 Turbopack was resolving the **repo root** because of the outer `package-lock.json`. `frontend/next.config.ts` now sets `turbopack.root` to the `frontend` folder. If it still misbehaves:

@@ -1,6 +1,3 @@
--- Dev seed: one hospital, cashier (password: changeme), sample services.
--- Password hash generated with bcrypt cost 10 for the string "changeme".
-
 INSERT INTO hospitals (id, name, location)
 VALUES (
   'a0000000-0000-4000-8000-000000000001',
@@ -13,8 +10,8 @@ VALUES (
   'b0000000-0000-4000-8000-000000000001',
   'a0000000-0000-4000-8000-000000000001',
   'Priya Menon',
-  'cashier@insurexp.local',
-  '$2b$10$RJ8SAQMHBibtMKNFgPc1SeAlNNmyDzMLMozbpcnhnfSgtDUKJaI9i'
+  'test@insurexp.com',
+  '$2b$10$HLY4o1yIg/N4KKQr9ylnTuoJVL1brQXmFYpCc3nbsu/1xZMC4AgEG'
 );
 
 INSERT INTO services (id, hospital_id, name, category, price)

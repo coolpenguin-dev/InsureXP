@@ -28,7 +28,15 @@ export async function apiFetch<T>(
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
   const url = path.startsWith("http") ? path : `${apiBaseUrl}${path.startsWith("/") ? "" : "/"}${path}`;
-  const res = await fetch(url, { ...rest, headers });
+  let res: Response;
+  try {
+    res = await fetch(url, { ...rest, headers });
+  } catch (e) {
+    const isTypeError = e instanceof TypeError;
+    const base = isTypeError ? e.message : e instanceof Error ? e.message : "Network error";
+    const hint = ` (${url}). Start the API from the repo root: npm run dev (Nest listens on port 4000).`;
+    throw new ApiError(base + hint, 0, e);
+  }
   const text = await res.text();
   let data: unknown = undefined;
   if (text) {

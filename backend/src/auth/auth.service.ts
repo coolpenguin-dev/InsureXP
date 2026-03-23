@@ -26,8 +26,8 @@ export class AuthService {
   async validateCashier(dto: LoginDto): Promise<Cashier> {
     const cashier = await this.cashiers
       .createQueryBuilder('c')
-      .addSelect('c.password_hash')
-      .where('c.email = :email', { email: dto.email })
+      .addSelect('c.passwordHash')
+      .where('LOWER(TRIM(c.email)) = :email', { email: dto.email })
       .getOne();
 
     if (!cashier?.passwordHash) {
