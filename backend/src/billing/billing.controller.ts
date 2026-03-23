@@ -1,0 +1,28 @@
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentCashier } from '../auth/decorators/current-cashier.decorator';
+import type { RequestCashier } from '../auth/strategies/jwt.strategy';
+import { BillingService } from './billing.service';
+import { CreateBillDto } from './dto/create-bill.dto';
+import { VerifyBillDto } from './dto/verify-bill.dto';
+
+@Controller('bills')
+@UseGuards(JwtAuthGuard)
+export class BillingController {
+  constructor(private readonly billing: BillingService) {}
+
+  @Post('create')
+  create(@Body() dto: CreateBillDto, @CurrentCashier() cashier: RequestCashier) {
+    return this.billing.create(dto, cashier);
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentCashier() cashier: RequestCashier) {
+    return this.billing.findOne(id, cashier);
+  }
+
+  @Post('verify')
+  verify(@Body() dto: VerifyBillDto, @CurrentCashier() cashier: RequestCashier) {
+    return this.billing.verify(dto.billId, cashier);
+  }
+}

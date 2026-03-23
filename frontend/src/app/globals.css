@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+/* InsureXP reference theme: indigo primary, lavender surfaces, emerald money accents */
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --ixp-primary: #4f46e5;
+  --ixp-primary-hover: #4338ca;
+  --ixp-card: #eef2ff;
+  --ixp-card-border: #e0e7ff;
+  --ixp-sidebar: #f1f5f9;
+  --ixp-success: #059669;
+  --ixp-success-muted: #10b981;
+  --ixp-add-action: #16a34a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}

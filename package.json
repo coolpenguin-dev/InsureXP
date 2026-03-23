@@ -1,0 +1,20 @@
+{
+  "name": "insurexp",
+  "private": true,
+  "description": "InsureXP — NestJS API + Next.js UI",
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run start:dev -w backend\" \"npm run dev -w frontend\"",
+    "start": "npm run dev",
+    "build": "npm run build -w backend && npm run build -w frontend"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
