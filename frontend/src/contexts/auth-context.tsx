@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { SESSION_EXPIRED_EVENT } from "@/lib/auth-events";
 import { apiFetch } from "@/lib/api";
 import {
   clearSession,
@@ -42,6 +43,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setSession(readSession());
     setReady(true);
+  }, []);
+
+  useEffect(() => {
+    function onExpired() {
+      clearSession();
+      setSession(null);
+      const path = window.location.pathname;
+      if (path !== "/login" && !path.startsWith("/login")) {
+        window.location.assign(`/login?returnTo=${encodeURIComponent(path + window.location.search)}`);
+      }
+    }
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {

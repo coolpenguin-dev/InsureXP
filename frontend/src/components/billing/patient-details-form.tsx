@@ -9,11 +9,20 @@ export type PatientRecord = {
   insuranceId: string | null;
 };
 
-type CreatePatientResponse = {
-  id: string;
-  name: string;
-  insuranceId: string | null;
-};
+function mapPatientResponse(raw: unknown): PatientRecord {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid patient response");
+  }
+  const o = raw as Record<string, unknown>;
+  if (typeof o.id !== "string" || typeof o.name !== "string") {
+    throw new Error("Invalid patient response");
+  }
+  const ins = o.insuranceId ?? o.insurance_id;
+  let insuranceId: string | null = null;
+  if (typeof ins === "string") insuranceId = ins;
+  else if (ins != null) insuranceId = String(ins);
+  return { id: o.id, name: o.name, insuranceId };
+}
 
 export function PatientDetailsForm({
   onPatientSaved,
@@ -38,15 +47,11 @@ export function PatientDetailsForm({
       const body: { name: string; insuranceId?: string } = { name: trimmed };
       const ins = insuranceId.trim();
       if (ins) body.insuranceId = ins;
-      const created = await apiFetch<CreatePatientResponse>("/patients", {
+      const created = await apiFetch<unknown>("/patients", {
         method: "POST",
         body: JSON.stringify(body),
       });
-      onPatientSaved({
-        id: created.id,
-        name: created.name,
-        insuranceId: created.insuranceId,
-      });
+      onPatientSaved(mapPatientResponse(created));
     } catch (err) {
       const msg =
         err instanceof ApiError
@@ -64,7 +69,7 @@ export function PatientDetailsForm({
     <div className="mx-auto max-w-lg rounded-2xl border border-indigo-100 bg-indigo-50/40 p-6 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-900">Patient details</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Enter the patient for this visit before adding services (Milestone 1).
+        Enter the patient for this visit before adding services.
       </p>
       <form className="mt-6 space-y-4" onSubmit={onSubmit}>
         <div>

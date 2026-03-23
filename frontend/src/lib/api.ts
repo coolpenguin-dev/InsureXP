@@ -1,5 +1,6 @@
-import { apiBaseUrl } from "./config";
 import { getAccessToken } from "./auth-storage";
+import { apiBaseUrl } from "./config";
+import { dispatchSessionExpired } from "./auth-events";
 
 export class ApiError extends Error {
   constructor(
@@ -47,6 +48,9 @@ export async function apiFetch<T>(
     }
   }
   if (!res.ok) {
+    if (res.status === 401 && auth) {
+      dispatchSessionExpired();
+    }
     let msg = res.statusText;
     if (typeof data === "object" && data !== null && "message" in data) {
       const m = (data as { message: unknown }).message;

@@ -10,6 +10,16 @@ Healthcare billing and payment workspace: **NestJS** API, **Next.js** cashier UI
 | `frontend/` | Next.js App Router, sidebar shell aligned to reference design |
 | `database/` | SQL migrations and optional dev seed |
 
+## Billing module
+
+| Area | What | Where |
+|------|------|--------|
+| **Cashier login / session** | JWT login, `localStorage` session, **401 → sign out + redirect to `/login`** | `/login`, `AuthProvider`, `apiFetch` |
+| **Patient details** | Name + optional insurance/MRN → `POST /api/patients` | `PatientDetailsForm` |
+| **Service selection** | `GET /api/services`, dropdown by **category**, qty, **Add item** | Billing tab |
+| **Line items** | Rows with **± qty**, remove | Billing tab |
+| **Subtotal & save** | Σ (unit × qty); **Save bill** → `POST /api/bills/create` | Billing tab |
+
 ## Prerequisites
 
 - Node.js 20+
@@ -25,7 +35,7 @@ psql "postgresql://USER:PASS@localhost:5432/insurexp" -f database/migrations/001
 psql "postgresql://USER:PASS@localhost:5432/insurexp" -f database/seeds/001_dev.sql
 ```
 
-See [`database/README.md`](database/README.md). Seed cashier: **`cashier@insurexp.local`** / **`changeme`**.
+See [`database/README.md`](database/README.md). Dev seed cashier: **`test@insurexp.com`** / **`111111`** (see `database/seeds/001_dev.sql`).
 
 ## Run API + UI together
 

@@ -265,6 +265,28 @@ export function BillingWorkspace() {
     setSaveMessage(null);
   }
 
+  function adjustLineQty(localId: string, delta: number) {
+    setLines((prev) =>
+      prev.map((l) => {
+        if (l.localId !== localId) return l;
+        const next = Math.max(1, l.qty + delta);
+        return { ...l, qty: next };
+      }),
+    );
+    setSaveMessage(null);
+    setSaveError(null);
+  }
+
+  const servicesByCategory = useMemo(() => {
+    const map = new Map<string, ApiService[]>();
+    for (const s of services) {
+      const cat = (s.category || "Other").trim() || "Other";
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat)!.push(s);
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [services]);
+
   async function saveBillToServer() {
     if (!patient || lines.length === 0) return;
     setSaving(true);
@@ -302,7 +324,7 @@ export function BillingWorkspace() {
       <div className="p-6 sm:p-8">
         <h1 className="text-xl font-semibold text-slate-900">Billing</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Sign in as a cashier, then enter patient details to start a bill.
+          Enter patient details to start a bill.
         </p>
         <div className="mt-8">
           <PatientDetailsForm onPatientSaved={setPatient} />
@@ -363,10 +385,14 @@ export function BillingWorkspace() {
                   {!services.length ? (
                     <option value="">No services</option>
                   ) : (
-                    services.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} – {formatInr(parsePrice(s.price))}
-                      </option>
+                    servicesByCategory.map(([category, list]) => (
+                      <optgroup key={category} label={category}>
+                        {list.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} – {formatInr(parsePrice(s.price))}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))
                   )}
                 </select>
@@ -434,7 +460,29 @@ export function BillingWorkspace() {
                         <td className="px-4 py-3 text-slate-700">
                           {formatInr(row.unit)}
                         </td>
-                        <td className="px-4 py-3 text-slate-700">{row.qty}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              className="rounded border border-slate-300 bg-white px-2 py-0.5 text-sm text-slate-700 hover:bg-slate-50"
+                              onClick={() => adjustLineQty(row.localId, -1)}
+                              aria-label="Decrease quantity"
+                            >
+                              −
+                            </button>
+                            <span className="min-w-8 text-center font-medium text-slate-800">
+                              {row.qty}
+                            </span>
+                            <button
+                              type="button"
+                              className="rounded border border-slate-300 bg-white px-2 py-0.5 text-sm text-slate-700 hover:bg-slate-50"
+                              onClick={() => adjustLineQty(row.localId, 1)}
+                              aria-label="Increase quantity"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 font-medium text-slate-800">
                           {formatInr(row.unit * row.qty)}
                         </td>
@@ -455,11 +503,21 @@ export function BillingWorkspace() {
               </table>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-base font-semibold text-slate-800">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Subtotal
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                {lines.length} line item{lines.length === 1 ? "" : "s"} — sum of
+                (unit price × quantity) for each row.
+              </p>
+              <p className="mt-2 text-lg font-semibold text-slate-900">
                 Subtotal:{" "}
                 <span className="text-emerald-600">{formatInr(subtotal)}</span>
               </p>
+            </div>
+
+            <div className="flex justify-end">
               <button
                 type="button"
                 onClick={() => void saveBillToServer()}
@@ -653,7 +711,7 @@ export function BillingWorkspace() {
           <div className="space-y-6">
             <h2 className="text-lg font-bold text-slate-900">Payment Split</h2>
             <p className="text-sm text-slate-600">
-              Patient cash portion vs insurer (Milestone 2+ API).
+              Patient cash portion vs insurer (API integration pending).
             </p>
             <div>
               <label className="text-sm font-medium text-slate-700">
