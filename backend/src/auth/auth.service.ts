@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import { Cashier } from '../entities/cashier.entity';
+import { Hospital } from '../entities/hospital.entity';
 import { LoginDto } from './dto/login.dto';
 
 export type JwtPayload = {
@@ -17,6 +18,8 @@ export class AuthService {
   constructor(
     @InjectRepository(Cashier)
     private readonly cashiers: Repository<Cashier>,
+    @InjectRepository(Hospital)
+    private readonly hospitals: Repository<Hospital>,
     private readonly jwt: JwtService,
   ) {}
 
@@ -41,6 +44,9 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     const cashier = await this.validateCashier(dto);
+    const hospital = await this.hospitals.findOne({
+      where: { id: cashier.hospitalId },
+    });
     const payload: JwtPayload = {
       sub: cashier.id,
       email: cashier.email,
@@ -54,6 +60,13 @@ export class AuthService {
         email: cashier.email,
         hospitalId: cashier.hospitalId,
       },
+      hospital: hospital
+        ? {
+            id: hospital.id,
+            name: hospital.name,
+            location: hospital.location,
+          }
+        : null,
     };
   }
 }

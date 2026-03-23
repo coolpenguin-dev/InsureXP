@@ -1,17 +1,37 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useAuth } from "@/contexts/auth-context";
+import { apiFetch, ApiError } from "@/lib/api";
+import { useEffect, useMemo, useState } from "react";
+import {
+  PatientDetailsForm,
+  type PatientRecord,
+} from "./patient-details-form";
 
 type BillingTab = "billing" | "discount" | "cashback" | "split";
 
-const MOCK_SERVICES = [
-  { id: "1", name: "Consultation", price: 1500 },
-  { id: "2", name: "Lab – CBC Test", price: 850 },
-  { id: "3", name: "Medication – Paracetamol", price: 120 },
-] as const;
+type ApiService = {
+  id: string;
+  name: string;
+  category: string;
+  price: string;
+};
+
+type Line = {
+  localId: string;
+  serviceId: string;
+  serviceName: string;
+  unit: number;
+  qty: number;
+};
 
 function formatInr(n: number) {
   return `₹${n.toLocaleString("en-IN")}`;
+}
+
+function parsePrice(p: string) {
+  const n = Number.parseFloat(p);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function TrashIcon({ className }: { className?: string }) {
@@ -36,7 +56,17 @@ function TrashIcon({ className }: { className?: string }) {
   );
 }
 
-function InfoCards() {
+function InfoCards({
+  patient,
+  hospitalLine,
+  cashierLine,
+}: {
+  patient: PatientRecord;
+  hospitalLine: string;
+  cashierLine: string;
+}) {
+  const displayId =
+    patient.insuranceId?.trim() || `PT-${patient.id.replace(/-/g, "").slice(0, 5).toUpperCase()}`;
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -45,25 +75,21 @@ function InfoCards() {
             Patient
           </p>
           <p className="mt-1 text-sm font-medium text-slate-800">
-            Rahul Sharma <span className="text-slate-500">|</span> ID: PT-00421
+            {patient.name} <span className="text-slate-500">|</span> ID: {displayId}
           </p>
         </div>
         <div className="rounded-xl border border-indigo-100 bg-indigo-50/90 px-4 py-3 shadow-sm">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-800/80">
             Hospital
           </p>
-          <p className="mt-1 text-sm font-medium text-slate-800">
-            Apollo Multispecialty <span className="text-slate-500">|</span> Ward B
-          </p>
+          <p className="mt-1 text-sm font-medium text-slate-800">{hospitalLine}</p>
         </div>
       </div>
       <div className="rounded-xl border border-indigo-100 bg-indigo-50/90 px-4 py-3 shadow-sm">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-800/80">
           Cashier
         </p>
-        <p className="mt-1 text-sm font-medium text-slate-800">
-          Priya Menon <span className="text-slate-500">|</span> Shift: Morning
-        </p>
+        <p className="mt-1 text-sm font-medium text-slate-800">{cashierLine}</p>
       </div>
     </div>
   );
@@ -136,28 +162,58 @@ function FooterActions() {
   );
 }
 
-type Line = { id: string; service: string; unit: number; qty: number };
+type BillCreated = {
+  id: string;
+  totalAmount: string;
+};
 
 export function BillingWorkspace() {
+  const { cashier, hospital } = useAuth();
+  const [patient, setPatient] = useState<PatientRecord | null>(null);
   const [tab, setTab] = useState<BillingTab>("billing");
-  const [lines, setLines] = useState<Line[]>([
-    { id: "a", service: "Consultation", unit: 1500, qty: 1 },
-    { id: "b", service: "Lab – CBC Test", unit: 850, qty: 2 },
-    { id: "c", service: "Medication – Paracetamol", unit: 120, qty: 5 },
-  ]);
-  const [selectedServiceId, setSelectedServiceId] = useState<string>(MOCK_SERVICES[0].id);
+  const [services, setServices] = useState<ApiService[]>([]);
+  const [servicesError, setServicesError] = useState<string | null>(null);
+  const [lines, setLines] = useState<Line[]>([]);
+  const [selectedServiceId, setSelectedServiceId] = useState("");
   const [qty, setQty] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [discountMode, setDiscountMode] = useState<"fixed" | "percent">("fixed");
   const [fixedDiscount, setFixedDiscount] = useState(500);
   const [percentDiscount, setPercentDiscount] = useState(10);
-
   const [insuranceCashback, setInsuranceCashback] = useState(200);
   const [loyaltyReward, setLoyaltyReward] = useState(150);
   const [promoAmount, setPromoAmount] = useState(0);
   const [promoCode, setPromoCode] = useState("");
-
   const [cashPercent, setCashPercent] = useState(10);
+
+  useEffect(() => {
+    if (!patient) return;
+    let cancelled = false;
+    setServicesError(null);
+    (async () => {
+      try {
+        const list = await apiFetch<ApiService[]>("/services");
+        if (!cancelled) {
+          setServices(list);
+          if (list.length && !list.some((s) => s.id === selectedServiceId)) {
+            setSelectedServiceId(list[0].id);
+          }
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setServicesError(
+            e instanceof ApiError ? e.message : "Could not load services",
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [patient]); // eslint-disable-line react-hooks/exhaustive-deps -- refetch when patient changes
 
   const subtotal = useMemo(
     () => lines.reduce((s, l) => s + l.unit * l.qty, 0),
@@ -174,29 +230,114 @@ export function BillingWorkspace() {
     0,
     updatedAfterDiscount - insuranceCashback - loyaltyReward - promoAmount,
   );
-
   const savingsToday = subtotal - netPayable;
 
+  const hospitalLine = hospital
+    ? [hospital.name, hospital.location].filter(Boolean).join(" | ")
+    : "—";
+
+  const cashierLine = cashier
+    ? `${cashier.name} | Shift: Morning`
+    : "—";
+
   function addLine() {
-    const svc = MOCK_SERVICES.find((s) => s.id === selectedServiceId);
+    const svc = services.find((s) => s.id === selectedServiceId);
     if (!svc) return;
-    const id = `${Date.now()}`;
+    const unit = parsePrice(svc.price);
+    const localId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     setLines((prev) => [
       ...prev,
-      { id, service: svc.name, unit: svc.price, qty: Math.max(1, qty) },
+      {
+        localId,
+        serviceId: svc.id,
+        serviceName: svc.name,
+        unit,
+        qty: Math.max(1, qty),
+      },
     ]);
     setQty(1);
+    setSaveMessage(null);
+    setSaveError(null);
   }
 
-  function removeLine(id: string) {
-    setLines((prev) => prev.filter((l) => l.id !== id));
+  function removeLine(localId: string) {
+    setLines((prev) => prev.filter((l) => l.localId !== localId));
+    setSaveMessage(null);
   }
 
-  const selectedSvc = MOCK_SERVICES.find((s) => s.id === selectedServiceId);
+  async function saveBillToServer() {
+    if (!patient || lines.length === 0) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaveMessage(null);
+    try {
+      const bill = await apiFetch<BillCreated>("/bills/create", {
+        method: "POST",
+        body: JSON.stringify({
+          patientId: patient.id,
+          items: lines.map((l) => ({ serviceId: l.serviceId, qty: l.qty })),
+        }),
+      });
+      const serverTotal = parsePrice(bill.totalAmount);
+      if (Math.abs(serverTotal - subtotal) < 0.01) {
+        setSaveMessage(
+          `Bill saved. ID ${bill.id}. Total ${formatInr(serverTotal)} (matches subtotal).`,
+        );
+      } else {
+        setSaveMessage(
+          `Bill saved. ID ${bill.id}. Server total ${formatInr(serverTotal)}; UI subtotal ${formatInr(subtotal)}.`,
+        );
+      }
+    } catch (e) {
+      setSaveError(e instanceof ApiError ? e.message : "Failed to save bill");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const selectedSvc = services.find((s) => s.id === selectedServiceId);
+
+  if (!patient) {
+    return (
+      <div className="p-6 sm:p-8">
+        <h1 className="text-xl font-semibold text-slate-900">Billing</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Sign in as a cashier, then enter patient details to start a bill.
+        </p>
+        <div className="mt-8">
+          <PatientDetailsForm onPatientSaved={setPatient} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 sm:p-8">
-      <InfoCards />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <h1 className="text-xl font-semibold text-slate-900">Billing</h1>
+        <button
+          type="button"
+          onClick={() => {
+            setPatient(null);
+            setLines([]);
+            setServices([]);
+            setSelectedServiceId("");
+            setSaveMessage(null);
+            setSaveError(null);
+          }}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          New patient
+        </button>
+      </div>
+
+      <div className="mt-6">
+        <InfoCards
+          patient={patient}
+          hospitalLine={hospitalLine}
+          cashierLine={cashierLine}
+        />
+      </div>
 
       <div className="mt-8">
         <BillingTabs active={tab} onChange={setTab} />
@@ -205,19 +346,29 @@ export function BillingWorkspace() {
       <div className="mt-8 min-h-[320px]">
         {tab === "billing" && (
           <div className="space-y-6">
+            {servicesError && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {servicesError}
+              </p>
+            )}
             <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
                 <span className="text-slate-500">Service Type:</span>
                 <select
                   value={selectedServiceId}
                   onChange={(e) => setSelectedServiceId(e.target.value)}
-                  className="max-w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  disabled={!services.length}
+                  className="max-w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
                 >
-                  {MOCK_SERVICES.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} – {formatInr(s.price)}
-                    </option>
-                  ))}
+                  {!services.length ? (
+                    <option value="">No services</option>
+                  ) : (
+                    services.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} – {formatInr(parsePrice(s.price))}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
               <div className="flex flex-wrap items-center gap-4">
@@ -242,7 +393,8 @@ export function BillingWorkspace() {
                 <button
                   type="button"
                   onClick={addLine}
-                  className="text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+                  disabled={!services.length || !selectedServiceId}
+                  className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 disabled:opacity-40"
                 >
                   + Add Item
                 </button>
@@ -261,41 +413,72 @@ export function BillingWorkspace() {
                   </tr>
                 </thead>
                 <tbody>
-                  {lines.map((row, i) => (
-                    <tr
-                      key={row.id}
-                      className={i % 2 === 0 ? "bg-white" : "bg-slate-50/80"}
-                    >
-                      <td className="px-4 py-3 font-medium text-slate-800">
-                        {row.service}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {formatInr(row.unit)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">{row.qty}</td>
-                      <td className="px-4 py-3 font-medium text-slate-800">
-                        {formatInr(row.unit * row.qty)}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => removeLine(row.id)}
-                          className="inline-flex rounded-lg p-1.5 text-sky-500 hover:bg-sky-50 hover:text-sky-600"
-                          aria-label="Remove line"
-                        >
-                          <TrashIcon />
-                        </button>
+                  {lines.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-8 text-center text-sm text-slate-500"
+                      >
+                        No line items yet. Add a service above.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    lines.map((row, i) => (
+                      <tr
+                        key={row.localId}
+                        className={i % 2 === 0 ? "bg-white" : "bg-slate-50/80"}
+                      >
+                        <td className="px-4 py-3 font-medium text-slate-800">
+                          {row.serviceName}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {formatInr(row.unit)}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">{row.qty}</td>
+                        <td className="px-4 py-3 font-medium text-slate-800">
+                          {formatInr(row.unit * row.qty)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removeLine(row.localId)}
+                            className="inline-flex rounded-lg p-1.5 text-sky-500 hover:bg-sky-50 hover:text-sky-600"
+                            aria-label="Remove line"
+                          >
+                            <TrashIcon />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
 
-            <p className="text-base font-semibold text-slate-800">
-              Subtotal:{" "}
-              <span className="text-emerald-600">{formatInr(subtotal)}</span>
-            </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-base font-semibold text-slate-800">
+                Subtotal:{" "}
+                <span className="text-emerald-600">{formatInr(subtotal)}</span>
+              </p>
+              <button
+                type="button"
+                onClick={() => void saveBillToServer()}
+                disabled={saving || lines.length === 0}
+                className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save bill to server"}
+              </button>
+            </div>
+            {saveMessage && (
+              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                {saveMessage}
+              </p>
+            )}
+            {saveError && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                {saveError}
+              </p>
+            )}
           </div>
         )}
 
@@ -437,7 +620,7 @@ export function BillingWorkspace() {
                 Apply
               </button>
             </div>
-            <div className="rounded-xl border border-indigo-100 bg-indigo-50/90 p-5 space-y-2 text-sm">
+            <div className="space-y-2 rounded-xl border border-indigo-100 bg-indigo-50/90 p-5 text-sm">
               <div className="flex justify-between text-slate-600">
                 <span>Updated Total (after discount)</span>
                 <span>{formatInr(updatedAfterDiscount)}</span>
@@ -470,7 +653,7 @@ export function BillingWorkspace() {
           <div className="space-y-6">
             <h2 className="text-lg font-bold text-slate-900">Payment Split</h2>
             <p className="text-sm text-slate-600">
-              Patient cash portion vs insurer (illustrative — wire to API later).
+              Patient cash portion vs insurer (Milestone 2+ API).
             </p>
             <div>
               <label className="text-sm font-medium text-slate-700">
@@ -502,7 +685,9 @@ export function BillingWorkspace() {
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>Insurer pays</span>
-                <span>{formatInr(Math.round((netPayable * (100 - cashPercent)) / 100))}</span>
+                <span>
+                  {formatInr(Math.round((netPayable * (100 - cashPercent)) / 100))}
+                </span>
               </div>
             </div>
           </div>
@@ -515,8 +700,7 @@ export function BillingWorkspace() {
 
       {tab === "billing" && selectedSvc && (
         <p className="mt-6 text-center text-[11px] text-slate-400">
-          Demo line items — API: services from{" "}
-          <code className="rounded bg-slate-100 px-1">/api/services</code>
+          Services loaded from <code className="rounded bg-slate-100 px-1">GET /api/services</code>
         </p>
       )}
     </div>
