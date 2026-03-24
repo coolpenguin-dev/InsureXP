@@ -449,6 +449,12 @@ export function BillingWorkspace() {
   const [services, setServices] = useState<ApiService[]>([]);
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
+  /** Bumps on add/remove/qty change; used to re-enable save after the bill lines change. */
+  const [linesRevision, setLinesRevision] = useState(0);
+  /** When set, save stays disabled until `linesRevision` differs (successful save snapshot). */
+  const [lastSuccessfulSaveRevision, setLastSuccessfulSaveRevision] = useState<
+    number | null
+  >(null);
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [qty, setQty] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -507,6 +513,13 @@ export function BillingWorkspace() {
       cancelled = true;
     };
   }, [patient]); // eslint-disable-line react-hooks/exhaustive-deps -- refetch when patient changes
+
+  useEffect(() => {
+    if (lines.length === 0) {
+      setLastSuccessfulSaveRevision(null);
+      setLinesRevision(0);
+    }
+  }, [lines.length]);
 
   const subtotal = useMemo(
     () => lines.reduce((s, l) => s + l.unit * l.qty, 0),
@@ -578,21 +591,29 @@ export function BillingWorkspace() {
     setQty(1);
     setSaveMessage(null);
     setSaveError(null);
+    setLinesRevision((r) => r + 1);
   }
 
   function removeLine(localId: string) {
     setLines((prev) => prev.filter((l) => l.localId !== localId));
     setSaveMessage(null);
+    setLinesRevision((r) => r + 1);
   }
 
   function adjustLineQty(localId: string, delta: number) {
-    setLines((prev) =>
-      prev.map((l) => {
+    setLines((prev) => {
+      let changed = false;
+      const next = prev.map((l) => {
         if (l.localId !== localId) return l;
-        const next = Math.max(1, l.qty + delta);
-        return { ...l, qty: next };
-      }),
-    );
+        const nq = Math.max(1, l.qty + delta);
+        if (nq !== l.qty) changed = true;
+        return { ...l, qty: nq };
+      });
+      if (changed) {
+        setLinesRevision((r) => r + 1);
+      }
+      return next;
+    });
     setSaveMessage(null);
     setSaveError(null);
   }
@@ -654,6 +675,7 @@ export function BillingWorkspace() {
           `Bill saved. Server subtotal ${formatInr(serverTotal)}; editor subtotal ${formatInr(subtotal)}.`,
         );
       }
+      setLastSuccessfulSaveRevision(linesRevision);
     } catch (e) {
       setSaveError(e instanceof ApiError ? e.message : "Failed to save bill");
     } finally {
@@ -763,6 +785,12 @@ export function BillingWorkspace() {
     savedBill.status !== "verified" ||
     hasSettlementChoice;
 
+  const saveBillDisabled =
+    saving ||
+    lines.length === 0 ||
+    (lastSuccessfulSaveRevision !== null &&
+      lastSuccessfulSaveRevision === linesRevision);
+
   if (!patient) {
     return (
       <div className="p-6 sm:p-8">
@@ -795,6 +823,8 @@ export function BillingWorkspace() {
             setActionNotice(null);
             setVerifyModalOpen(false);
             setVerifyModalNotifications([]);
+            setLinesRevision(0);
+            setLastSuccessfulSaveRevision(null);
           }}
           className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
@@ -970,7 +1000,7 @@ export function BillingWorkspace() {
               <button
                 type="button"
                 onClick={() => void saveBillToServer()}
-                disabled={saving || lines.length === 0}
+                disabled={saveBillDisabled}
                 className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
               >
                 {saving ? "Saving…" : "Save bill to server"}
