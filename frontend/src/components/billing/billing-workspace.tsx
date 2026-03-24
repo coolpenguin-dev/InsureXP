@@ -410,7 +410,7 @@ function FooterActions({
     <div className="space-y-3 border-t border-slate-200 pt-6">
       <p className="text-center text-[11px] leading-relaxed text-slate-400">
         Verification triggers mock email/WhatsApp; settlement runs after insurer
-        approval (demo).
+        approval (demo). Choose either instant or expedited settlement — not both.
       </p>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
         <button
@@ -748,14 +748,20 @@ export function BillingWorkspace() {
 
   const verifyDisabled =
     !savedBill || savedBill.status !== "draft";
+  const hasSettlementChoice =
+    Boolean(
+      savedBill?.settlements?.some(
+        (s) => s.type === "instant" || s.type === "expedited",
+      ),
+    );
   const instantDisabled =
     !savedBill ||
     savedBill.status !== "verified" ||
-    Boolean(savedBill.settlements?.some((s) => s.type === "instant"));
+    hasSettlementChoice;
   const expeditedDisabled =
     !savedBill ||
     savedBill.status !== "verified" ||
-    Boolean(savedBill.settlements?.some((s) => s.type === "expedited"));
+    hasSettlementChoice;
 
   if (!patient) {
     return (

@@ -27,6 +27,14 @@ export class SettlementService {
 
   async instant(billId: string, cashier: RequestCashier) {
     await this.loadVerifiedBill(billId, cashier.hospitalId);
+    const other = await this.settlements.findOne({
+      where: { billId, type: 'expedited' },
+    });
+    if (other) {
+      throw new BadRequestException(
+        'This bill already has an expedited settlement; instant settlement is not available',
+      );
+    }
     const existing = await this.settlements.findOne({
       where: { billId, type: 'instant' },
     });
@@ -51,6 +59,14 @@ export class SettlementService {
 
   async expedited(billId: string, cashier: RequestCashier) {
     await this.loadVerifiedBill(billId, cashier.hospitalId);
+    const other = await this.settlements.findOne({
+      where: { billId, type: 'instant' },
+    });
+    if (other) {
+      throw new BadRequestException(
+        'This bill already completed instant settlement; expedited settlement is not available',
+      );
+    }
     const existing = await this.settlements.findOne({
       where: { billId, type: 'expedited' },
     });
