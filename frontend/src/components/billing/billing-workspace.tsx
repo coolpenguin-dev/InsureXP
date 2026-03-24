@@ -340,10 +340,29 @@ export function BillingWorkspace() {
                 <input
                   type="number"
                   min={0}
+                  step={1}
+                  inputMode="numeric"
                   value={fixedDiscount}
                   onChange={(e) => {
                     clearDiscountApplyFeedback();
-                    setFixedDiscount(Number(e.target.value) || 0);
+                    const raw = e.target.value.trim();
+                    if (raw === "") {
+                      setFixedDiscount(0);
+                      return;
+                    }
+                    const n = Number(raw);
+                    if (!Number.isFinite(n)) {
+                      return;
+                    }
+                    setFixedDiscount(Math.max(0, n));
+                  }}
+                  onBlur={() => {
+                    setFixedDiscount((v) => (Number.isFinite(v) ? Math.max(0, v) : 0));
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "-" || e.key === "e" || e.key === "E" || e.key === "+") {
+                      e.preventDefault();
+                    }
                   }}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
