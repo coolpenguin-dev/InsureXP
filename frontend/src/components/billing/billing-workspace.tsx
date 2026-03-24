@@ -30,6 +30,7 @@ type BillItemApi = {
   qty: number;
   price: string;
   lineTotal: string;
+  serviceId?: string;
   service?: { name: string };
 };
 
@@ -70,6 +71,31 @@ function formatInr(n: number) {
 function parsePrice(p: string) {
   const n = Number.parseFloat(p);
   return Number.isFinite(n) ? n : 0;
+}
+
+function linesSignature(lines: Line[]) {
+  return JSON.stringify(
+    [...lines]
+      .map((l) => ({ serviceId: l.serviceId, qty: l.qty }))
+      .sort(
+        (a, b) =>
+          a.serviceId.localeCompare(b.serviceId) || a.qty - b.qty,
+      ),
+  );
+}
+
+function billItemsSignature(items: BillItemApi[]) {
+  return JSON.stringify(
+    [...items]
+      .map((i) => ({
+        serviceId: i.serviceId ?? "",
+        qty: i.qty,
+      }))
+      .sort(
+        (a, b) =>
+          a.serviceId.localeCompare(b.serviceId) || a.qty - b.qty,
+      ),
+  );
 }
 
 function TrashIcon({ className }: { className?: string }) {
@@ -277,17 +303,31 @@ function MockVerifyModal({
 
 function BillSummaryPanel({
   bill,
+  previewTotals,
   onApprove,
   approving,
   flowError,
 }: {
   bill: BillDetail;
+  /** Editor-aligned totals when line items match the saved bill (discount/cashback preview). */
+  previewTotals: {
+    subtotal: number;
+    discount: number;
+    cashback: number;
+    final: number;
+    unsavedVsServer: boolean;
+  } | null;
   onApprove: () => void;
   approving: boolean;
   flowError: string | null;
 }) {
   const hasInstant = bill.settlements?.some((s) => s.type === "instant");
   const hasExpedited = bill.settlements?.some((s) => s.type === "expedited");
+
+  const subtotalN = previewTotals?.subtotal ?? parsePrice(bill.totalAmount);
+  const discountN = previewTotals?.discount ?? parsePrice(bill.discountAmount);
+  const cashbackN = previewTotals?.cashback ?? parsePrice(bill.cashbackAmount);
+  const finalN = previewTotals?.final ?? parsePrice(bill.finalAmount);
 
   return (
     <div className="rounded-xl border border-indigo-200 bg-white p-5 shadow-sm">
@@ -332,23 +372,28 @@ function BillSummaryPanel({
       <div className="mt-4 space-y-1.5 text-sm">
         <div className="flex justify-between text-slate-600">
           <span>Subtotal</span>
-          <span>{formatInr(parsePrice(bill.totalAmount))}</span>
+          <span>{formatInr(subtotalN)}</span>
         </div>
         <div className="flex justify-between text-slate-600">
           <span>Discount</span>
-          <span>− {formatInr(parsePrice(bill.discountAmount))}</span>
+          <span>− {formatInr(discountN)}</span>
         </div>
         <div className="flex justify-between text-slate-600">
           <span>Cashback</span>
-          <span>− {formatInr(parsePrice(bill.cashbackAmount))}</span>
+          <span>− {formatInr(cashbackN)}</span>
         </div>
         <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
           <span>Final</span>
-          <span className="text-emerald-600">
-            {formatInr(parsePrice(bill.finalAmount))}
-          </span>
+          <span className="text-emerald-600">{formatInr(finalN)}</span>
         </div>
       </div>
+
+      {previewTotals?.unsavedVsServer && (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950 ring-1 ring-amber-200">
+          Totals match the editor (discount/cashback). Save the bill again to persist
+          them to the server.
+        </p>
+      )}
 
       {bill.status === "pending_verification" && (
         <button
@@ -540,6 +585,10 @@ export function BillingWorkspace() {
 
   const updatedAfterDiscount = Math.max(0, subtotal - appliedDiscount);
 
+  function bumpEditorRevision() {
+    setLinesRevision((r) => r + 1);
+  }
+
   function onDiscountDraftChange() {
     setDiscountApplyFeedback(null);
     setAppliedDiscountAmount(null);
@@ -558,12 +607,54 @@ export function BillingWorkspace() {
       tone: "success",
       message: "Discount applied successfully.",
     });
+    bumpEditorRevision();
   }
   const netPayable = Math.max(
     0,
     updatedAfterDiscount - insuranceCashback - loyaltyReward - promoAmount,
   );
   const savingsToday = subtotal - netPayable;
+
+  const cappedCashbackForServer = Math.min(
+    insuranceCashback + loyaltyReward + promoAmount,
+    updatedAfterDiscount,
+  );
+  const finalAlignedWithServer = Math.max(
+    0,
+    updatedAfterDiscount - cappedCashbackForServer,
+  );
+
+  const linesMatchSaved = useMemo(() => {
+    if (!savedBill || lines.length === 0) return false;
+    return linesSignature(lines) === billItemsSignature(savedBill.items);
+  }, [savedBill, lines]);
+
+  const billSummaryPreview = useMemo(() => {
+    if (!savedBill || !linesMatchSaved) return null;
+    const disc = appliedDiscount;
+    const cb = cappedCashbackForServer;
+    const fin = finalAlignedWithServer;
+    const eps = 0.005;
+    const unsavedVsServer =
+      Math.abs(subtotal - parsePrice(savedBill.totalAmount)) > eps ||
+      Math.abs(disc - parsePrice(savedBill.discountAmount)) > eps ||
+      Math.abs(cb - parsePrice(savedBill.cashbackAmount)) > eps ||
+      Math.abs(fin - parsePrice(savedBill.finalAmount)) > eps;
+    return {
+      subtotal,
+      discount: disc,
+      cashback: cb,
+      final: fin,
+      unsavedVsServer,
+    };
+  }, [
+    savedBill,
+    linesMatchSaved,
+    subtotal,
+    appliedDiscount,
+    cappedCashbackForServer,
+    finalAlignedWithServer,
+  ]);
 
   const hospitalLine = hospital
     ? [hospital.name, hospital.location].filter(Boolean).join(" | ")
@@ -1174,7 +1265,10 @@ export function BillingWorkspace() {
                     type="number"
                     min={0}
                     value={insuranceCashback}
-                    onChange={(e) => setInsuranceCashback(Number(e.target.value) || 0)}
+                    onChange={(e) => {
+                      setInsuranceCashback(Number(e.target.value) || 0);
+                      bumpEditorRevision();
+                    }}
                     className="ml-1 w-24 rounded border border-slate-200 px-2 py-1 text-sm font-semibold"
                   />
                 </p>
@@ -1190,7 +1284,10 @@ export function BillingWorkspace() {
                     type="number"
                     min={0}
                     value={loyaltyReward}
-                    onChange={(e) => setLoyaltyReward(Number(e.target.value) || 0)}
+                    onChange={(e) => {
+                      setLoyaltyReward(Number(e.target.value) || 0);
+                      bumpEditorRevision();
+                    }}
                     className="ml-1 w-24 rounded border border-slate-200 px-2 py-1 text-sm font-semibold"
                   />
                 </p>
@@ -1208,7 +1305,10 @@ export function BillingWorkspace() {
               <button
                 type="button"
                 onClick={() => {
-                  if (promoCode.trim()) setPromoAmount(50);
+                  if (promoCode.trim()) {
+                    setPromoAmount(50);
+                    bumpEditorRevision();
+                  }
                 }}
                 className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
               >
@@ -1293,6 +1393,7 @@ export function BillingWorkspace() {
         <div className="mt-10 space-y-3">
           <BillSummaryPanel
             bill={savedBill}
+            previewTotals={billSummaryPreview}
             onApprove={() => void handleApprove()}
             approving={approveLoading}
             flowError={flowError}
