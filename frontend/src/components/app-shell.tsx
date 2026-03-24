@@ -1,4 +1,8 @@
+"use client";
+
+import { useAuth } from "@/contexts/auth-context";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard" },
@@ -16,6 +20,9 @@ export function AppShell({
   children: React.ReactNode;
   activeHref?: string;
 }) {
+  const { cashier, logout } = useAuth();
+  const router = useRouter();
+
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900">
       <aside className="flex w-[220px] shrink-0 flex-col border-r border-slate-200/80 bg-slate-100">
@@ -43,8 +50,32 @@ export function AppShell({
           })}
         </nav>
         <div className="border-t border-slate-200/80 p-4">
-          <p className="text-sm font-semibold text-slate-900">Dr. Admin</p>
-          <p className="text-xs text-slate-500">Super Admin</p>
+          {cashier ? (
+            <>
+              <p className="text-sm font-semibold text-slate-900">{cashier.name}</p>
+              <p className="text-xs text-slate-500">Cashier</p>
+              <button
+                type="button"
+                onClick={() => {
+                  logout();
+                  router.push("/login");
+                }}
+                className="mt-3 text-xs font-medium text-indigo-600 hover:underline"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-slate-900">Guest</p>
+              <Link
+                href="/login"
+                className="mt-2 inline-block text-xs font-medium text-indigo-600 hover:underline"
+              >
+                Sign in
+              </Link>
+            </>
+          )}
         </div>
       </aside>
       <main className="min-w-0 flex-1 overflow-auto bg-white">{children}</main>

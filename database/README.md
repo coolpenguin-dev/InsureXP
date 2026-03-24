@@ -25,7 +25,7 @@ psql $env:DATABASE_URL -f database/seeds/001_dev.sql
 Seed creates:
 
 - Hospital `Apollo Multispecialty`
-- Cashier `cashier@insurexp.local` / password `changeme`
+- Cashier `xxx@xxx.xxx` / password `xxxxxxx`
 - Sample services and one patient
 
 ## Connection string

@@ -10,6 +10,16 @@ Healthcare billing and payment workspace: **NestJS** API, **Next.js** cashier UI
 | `frontend/` | Next.js App Router, sidebar shell aligned to reference design |
 | `database/` | SQL migrations and optional dev seed |
 
+## Billing module
+
+| Area | What | Where |
+|------|------|--------|
+| **Cashier login / session** | JWT login, `localStorage` session, **401 → sign out + redirect to `/login`** | `/login`, `AuthProvider`, `apiFetch` |
+| **Patient details** | Name + optional insurance/MRN → `POST /api/patients` | `PatientDetailsForm` |
+| **Service selection** | `GET /api/services`, dropdown by **category**, qty, **Add item** | Billing tab |
+| **Line items** | Rows with **± qty**, remove | Billing tab |
+| **Subtotal & save** | Σ (unit × qty); **Save bill** → `POST /api/bills/create` | Billing tab |
+
 ## Prerequisites
 
 - Node.js 20+
@@ -25,7 +35,7 @@ psql "postgresql://USER:PASS@localhost:5432/insurexp" -f database/migrations/001
 psql "postgresql://USER:PASS@localhost:5432/insurexp" -f database/seeds/001_dev.sql
 ```
 
-See [`database/README.md`](database/README.md). Seed cashier: **`cashier@insurexp.local`** / **`changeme`**.
+See [`database/README.md`](database/README.md). Dev seed cashier: **`test@insurexp.com`** / **`111111`** (see `database/seeds/001_dev.sql`).
 
 ## Run API + UI together
 
@@ -44,6 +54,14 @@ This starts **Nest** on `http://localhost:4000` and **Next.js** on `http://local
 - `frontend/.env.local` — copy from `frontend/.env.example` if you need a non-default API URL.
 
 `npm start` is an alias for `npm run dev`.
+
+### `ERR_CONNECTION_REFUSED` on login (port 4000)
+
+The UI calls `http://localhost:4000/api`. If the browser shows connection refused, the **API process is not listening**—usually because Nest failed during startup.
+
+1. Watch the **`[api]`** lines in the same terminal as `npm run dev`. You should see **`Nest application successfully started`** and no repeating TypeORM errors.
+2. Ensure **`backend/.env`** exists with a valid **`DATABASE_URL`** and that **PostgreSQL is running** with the schema applied (see [Database setup](#database-setup)).
+3. If you only see **`[web]`** logs or the api process exits, fix the backend error first, then restart `npm run dev`.
 
 ### Next.js dev errors on Windows (`ENOENT` / `_buildManifest.js.tmp`)
 

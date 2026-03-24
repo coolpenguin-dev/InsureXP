@@ -112,7 +112,21 @@ export class BillingService {
         await itemRepo.save(item);
       }
 
-      return this.findOne(bill.id, cashier);
+      // Must use the same transactional manager: the global repository cannot see
+      // uncommitted rows, so this.findOne() here always failed with "Bill not found".
+      const created = await billRepo.findOne({
+        where: { id: bill.id, hospitalId: cashier.hospitalId },
+        relations: {
+          patient: true,
+          items: { service: true },
+          hospital: true,
+          cashier: true,
+        },
+      });
+      if (!created) {
+        throw new NotFoundException('Bill not found');
+      }
+      return created;
     });
   }
 
@@ -133,7 +147,7 @@ export class BillingService {
     return bill;
   }
 
-  /** Placeholder: enqueue verification (WhatsApp / email) in a later milestone. */
+  /** Placeholder: enqueue verification (WhatsApp / email) when integrated. */
   async verify(billId: string, cashier: RequestCashier) {
     const bill = await this.findOne(billId, cashier);
     if (bill.status !== 'draft') {
