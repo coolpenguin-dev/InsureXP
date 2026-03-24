@@ -5,6 +5,7 @@ import type { SignOptions } from 'jsonwebtoken';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Cashier } from '../entities/cashier.entity';
+import { Hospital } from '../entities/hospital.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -12,7 +13,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 @Global()
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Cashier]),
+    TypeOrmModule.forFeature([Cashier, Hospital]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
