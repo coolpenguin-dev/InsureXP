@@ -187,6 +187,8 @@ export function BillingWorkspace() {
     tone: "success" | "error";
     message: string;
   } | null>(null);
+  /** Rupee discount applied to summaries only after a successful Apply Discount. */
+  const [appliedDiscountAmount, setAppliedDiscountAmount] = useState<number | null>(null);
   const [insuranceCashback, setInsuranceCashback] = useState(200);
   const [loyaltyReward, setLoyaltyReward] = useState(150);
   const [promoAmount, setPromoAmount] = useState(0);
@@ -226,6 +228,7 @@ export function BillingWorkspace() {
 
   useEffect(() => {
     setDiscountApplyFeedback(null);
+    setAppliedDiscountAmount(null);
   }, [subtotal]);
 
   const proposedDiscount =
@@ -233,12 +236,13 @@ export function BillingWorkspace() {
       ? fixedDiscount
       : Math.round((subtotal * percentDiscount) / 100);
 
-  const discountApplied = proposedDiscount;
+  const appliedDiscount = appliedDiscountAmount ?? 0;
 
-  const updatedAfterDiscount = Math.max(0, subtotal - discountApplied);
+  const updatedAfterDiscount = Math.max(0, subtotal - appliedDiscount);
 
-  function clearDiscountApplyFeedback() {
+  function onDiscountDraftChange() {
     setDiscountApplyFeedback(null);
+    setAppliedDiscountAmount(null);
   }
 
   function handleApplyDiscount() {
@@ -249,6 +253,7 @@ export function BillingWorkspace() {
       });
       return;
     }
+    setAppliedDiscountAmount(proposedDiscount);
     setDiscountApplyFeedback({
       tone: "success",
       message: "Discount applied successfully.",
@@ -585,7 +590,7 @@ export function BillingWorkspace() {
                   inputMode="numeric"
                   value={fixedDiscount}
                   onChange={(e) => {
-                    clearDiscountApplyFeedback();
+                    onDiscountDraftChange();
                     const raw = e.target.value.trim();
                     if (raw === "") {
                       setFixedDiscount(0);
@@ -619,7 +624,7 @@ export function BillingWorkspace() {
                   max={100}
                   value={percentDiscount}
                   onChange={(e) => {
-                    clearDiscountApplyFeedback();
+                    onDiscountDraftChange();
                     setPercentDiscount(Number(e.target.value) || 0);
                   }}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
@@ -631,7 +636,7 @@ export function BillingWorkspace() {
               <button
                 type="button"
                 onClick={() => {
-                  clearDiscountApplyFeedback();
+                  onDiscountDraftChange();
                   setDiscountMode("fixed");
                 }}
                 className={`rounded-lg px-3 py-1.5 font-medium ${
@@ -646,7 +651,7 @@ export function BillingWorkspace() {
               <button
                 type="button"
                 onClick={() => {
-                  clearDiscountApplyFeedback();
+                  onDiscountDraftChange();
                   setDiscountMode("percent");
                 }}
                 className={`rounded-lg px-3 py-1.5 font-medium ${
@@ -665,14 +670,16 @@ export function BillingWorkspace() {
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>Discount Applied</span>
-                <span>− {formatInr(discountApplied)}</span>
+                <span>− {formatInr(appliedDiscount)}</span>
               </div>
               <div className="border-t border-slate-200 pt-2" />
               <div className="flex justify-between text-base font-semibold">
                 <span className="text-slate-800">Updated Total</span>
                 <span
                   className={
-                    proposedDiscount > subtotal ? "text-rose-600" : "text-emerald-600"
+                    appliedDiscountAmount === null && proposedDiscount > subtotal
+                      ? "text-rose-600"
+                      : "text-emerald-600"
                   }
                 >
                   {formatInr(updatedAfterDiscount)}
