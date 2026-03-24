@@ -1,9 +1,14 @@
 import { AppShell } from "@/components/app-shell";
+import { RequireCashier } from "@/components/auth/require-cashier";
 
 export default function BillingLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <AppShell activeHref="/billing">{children}</AppShell>;
+  return (
+    <RequireCashier>
+      <AppShell activeHref="/billing">{children}</AppShell>
+    </RequireCashier>
+  );
 }
