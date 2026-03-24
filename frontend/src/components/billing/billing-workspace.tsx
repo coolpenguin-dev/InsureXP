@@ -183,6 +183,10 @@ export function BillingWorkspace() {
   const [discountMode, setDiscountMode] = useState<"fixed" | "percent">("fixed");
   const [fixedDiscount, setFixedDiscount] = useState(500);
   const [percentDiscount, setPercentDiscount] = useState(10);
+  const [discountApplyFeedback, setDiscountApplyFeedback] = useState<{
+    tone: "success" | "error";
+    message: string;
+  } | null>(null);
   const [insuranceCashback, setInsuranceCashback] = useState(200);
   const [loyaltyReward, setLoyaltyReward] = useState(150);
   const [promoAmount, setPromoAmount] = useState(0);
