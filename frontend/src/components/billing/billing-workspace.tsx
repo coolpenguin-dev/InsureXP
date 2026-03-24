@@ -25,6 +25,44 @@ type Line = {
   qty: number;
 };
 
+type BillItemApi = {
+  id: string;
+  qty: number;
+  price: string;
+  lineTotal: string;
+  service?: { name: string };
+};
+
+type SettlementApi = {
+  id: string;
+  type: string;
+  status: string;
+  processedAt: string | null;
+};
+
+type BillDetail = {
+  id: string;
+  status: string;
+  totalAmount: string;
+  discountAmount: string;
+  cashbackAmount: string;
+  finalAmount: string;
+  patient?: { name: string; insuranceId?: string | null };
+  items: BillItemApi[];
+  settlements?: SettlementApi[];
+};
+
+type VerifyNotification = {
+  channel: "email" | "whatsapp";
+  to: string;
+  sentAt: string;
+};
+
+function toMoneyString(n: number) {
+  const v = Math.round(Math.max(0, n) * 100) / 100;
+  return v.toFixed(2);
+}
+
 function formatInr(n: number) {
   return `₹${n.toLocaleString("en-IN")}`;
 }
@@ -131,41 +169,278 @@ function BillingTabs({
   );
 }
 
-function FooterActions() {
+function statusBadgeClass(status: string) {
+  switch (status) {
+    case "draft":
+      return "bg-slate-100 text-slate-800 ring-slate-200";
+    case "pending_verification":
+      return "bg-amber-50 text-amber-900 ring-amber-200";
+    case "verified":
+      return "bg-emerald-50 text-emerald-900 ring-emerald-200";
+    case "paid":
+      return "bg-indigo-50 text-indigo-900 ring-indigo-200";
+    default:
+      return "bg-slate-100 text-slate-700 ring-slate-200";
+  }
+}
+
+function formatBillStatus(status: string) {
+  const labels: Record<string, string> = {
+    draft: "Draft",
+    pending_verification: "Pending verification",
+    verified: "Verified",
+    paid: "Paid",
+  };
+  return labels[status] ?? status;
+}
+
+function MockVerifyModal({
+  open,
+  notifications,
+  onClose,
+}: {
+  open: boolean;
+  notifications: VerifyNotification[];
+  onClose: () => void;
+}) {
+  const [revealed, setRevealed] = useState(0);
+
+  useEffect(() => {
+    if (!open || notifications.length === 0) {
+      setRevealed(0);
+      return;
+    }
+    setRevealed(0);
+    const steps = notifications.length;
+    const timers: number[] = [];
+    for (let i = 1; i <= steps; i++) {
+      timers.push(
+        window.setTimeout(() => setRevealed(i), 350 + (i - 1) * 550),
+      );
+    }
+    return () => timers.forEach((t) => clearTimeout(t));
+  }, [open, notifications]);
+
+  if (!open) return null;
+
   return (
-    <div className="space-y-3 border-t border-slate-200 pt-6">
-      <p className="text-center text-[11px] leading-relaxed text-slate-400">
-        Connects to WhatsApp / email gateway and sends all the information as a
-        bill
-      </p>
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="verify-mock-title"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          id="verify-mock-title"
+          className="text-lg font-semibold text-slate-900"
+        >
+          Mock bill delivery
+        </h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Demo only — no real messages are sent.
+        </p>
+        <ul className="mt-5 space-y-3">
+          {notifications.slice(0, revealed).map((n, i) => (
+            <li
+              key={`${n.channel}-${i}`}
+              className="rounded-xl border border-emerald-100 bg-emerald-50/80 px-4 py-3 text-sm"
+            >
+              <p className="font-semibold capitalize text-emerald-900">
+                {n.channel} sent
+              </p>
+              <p className="mt-1 font-mono text-xs text-slate-700">{n.to}</p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                {new Date(n.sentAt).toLocaleString()}
+              </p>
+            </li>
+          ))}
+        </ul>
+        {revealed < notifications.length && (
+          <p className="mt-4 text-sm text-slate-500">Sending…</p>
+        )}
         <button
           type="button"
-          className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:flex-none sm:min-w-[160px]"
+          onClick={onClose}
+          className="mt-6 w-full rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
         >
-          <span aria-hidden>🔍</span> Verify Bill
-        </button>
-        <button
-          type="button"
-          className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:flex-none sm:min-w-[160px]"
-        >
-          <span aria-hidden>⚡</span> Instant Settlement
-        </button>
-        <button
-          type="button"
-          className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:flex-none sm:min-w-[160px]"
-        >
-          <span aria-hidden>🚀</span> Expedited Settlement
+          Close
         </button>
       </div>
     </div>
   );
 }
 
-type BillCreated = {
-  id: string;
-  totalAmount: string;
-};
+function BillSummaryPanel({
+  bill,
+  onApprove,
+  approving,
+  flowError,
+}: {
+  bill: BillDetail;
+  onApprove: () => void;
+  approving: boolean;
+  flowError: string | null;
+}) {
+  const hasInstant = bill.settlements?.some((s) => s.type === "instant");
+  const hasExpedited = bill.settlements?.some((s) => s.type === "expedited");
+
+  return (
+    <div className="rounded-xl border border-indigo-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-base font-semibold text-slate-900">Bill summary</h2>
+        <span
+          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${statusBadgeClass(bill.status)}`}
+        >
+          {formatBillStatus(bill.status)}
+        </span>
+      </div>
+      <p className="mt-1 font-mono text-xs text-slate-500">ID {bill.id}</p>
+
+      <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-600">
+              <th className="px-3 py-2">Service</th>
+              <th className="px-3 py-2">Qty</th>
+              <th className="px-3 py-2 text-right">Line</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bill.items.map((row, i) => (
+              <tr
+                key={row.id}
+                className={i % 2 === 0 ? "bg-white" : "bg-slate-50/80"}
+              >
+                <td className="px-3 py-2 font-medium text-slate-800">
+                  {row.service?.name ?? "—"}
+                </td>
+                <td className="px-3 py-2 text-slate-700">{row.qty}</td>
+                <td className="px-3 py-2 text-right font-medium text-slate-800">
+                  {formatInr(parsePrice(row.lineTotal))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-4 space-y-1.5 text-sm">
+        <div className="flex justify-between text-slate-600">
+          <span>Subtotal</span>
+          <span>{formatInr(parsePrice(bill.totalAmount))}</span>
+        </div>
+        <div className="flex justify-between text-slate-600">
+          <span>Discount</span>
+          <span>− {formatInr(parsePrice(bill.discountAmount))}</span>
+        </div>
+        <div className="flex justify-between text-slate-600">
+          <span>Cashback</span>
+          <span>− {formatInr(parsePrice(bill.cashbackAmount))}</span>
+        </div>
+        <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
+          <span>Final</span>
+          <span className="text-emerald-600">
+            {formatInr(parsePrice(bill.finalAmount))}
+          </span>
+        </div>
+      </div>
+
+      {bill.status === "pending_verification" && (
+        <button
+          type="button"
+          onClick={onApprove}
+          disabled={approving}
+          className="mt-4 w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 sm:w-auto sm:px-6"
+        >
+          {approving ? "Approving…" : "Simulate insurer approval"}
+        </button>
+      )}
+
+      {(hasInstant || hasExpedited) && (
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-700">
+          <p className="font-semibold text-slate-800">Settlements (demo)</p>
+          <ul className="mt-2 space-y-1">
+            {bill.settlements?.map((s) => (
+              <li key={s.id}>
+                <span className="font-medium capitalize">{s.type}</span>: {s.status}
+                {s.processedAt &&
+                  ` · ${new Date(s.processedAt).toLocaleString()}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {flowError && (
+        <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          {flowError}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function FooterActions({
+  onVerify,
+  verifyLoading,
+  verifyDisabled,
+  onInstant,
+  instantLoading,
+  instantDisabled,
+  onExpedited,
+  expeditedLoading,
+  expeditedDisabled,
+}: {
+  onVerify: () => void;
+  verifyLoading: boolean;
+  verifyDisabled: boolean;
+  onInstant: () => void;
+  instantLoading: boolean;
+  instantDisabled: boolean;
+  onExpedited: () => void;
+  expeditedLoading: boolean;
+  expeditedDisabled: boolean;
+}) {
+  return (
+    <div className="space-y-3 border-t border-slate-200 pt-6">
+      <p className="text-center text-[11px] leading-relaxed text-slate-400">
+        Verification triggers mock email/WhatsApp; settlement runs after insurer
+        approval (demo).
+      </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
+        <button
+          type="button"
+          onClick={onVerify}
+          disabled={verifyDisabled || verifyLoading}
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50 sm:flex-none sm:min-w-[160px]"
+        >
+          {verifyLoading ? "Verifying…" : "Verify Bill"}
+        </button>
+        <button
+          type="button"
+          onClick={onInstant}
+          disabled={instantDisabled || instantLoading}
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50 sm:flex-none sm:min-w-[160px]"
+        >
+          {instantLoading ? "Processing…" : "Instant Settlement"}
+        </button>
+        <button
+          type="button"
+          onClick={onExpedited}
+          disabled={expeditedDisabled || expeditedLoading}
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50 sm:flex-none sm:min-w-[160px]"
+        >
+          {expeditedLoading ? "Queueing…" : "Expedited Settlement"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function BillingWorkspace() {
   const { cashier, hospital } = useAuth();
@@ -179,6 +454,18 @@ export function BillingWorkspace() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const [savedBill, setSavedBill] = useState<BillDetail | null>(null);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [approveLoading, setApproveLoading] = useState(false);
+  const [instantLoading, setInstantLoading] = useState(false);
+  const [expeditedLoading, setExpeditedLoading] = useState(false);
+  const [flowError, setFlowError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [verifyModalOpen, setVerifyModalOpen] = useState(false);
+  const [verifyModalNotifications, setVerifyModalNotifications] = useState<
+    VerifyNotification[]
+  >([]);
 
   const [discountMode, setDiscountMode] = useState<"fixed" | "percent">("fixed");
   const [fixedDiscount, setFixedDiscount] = useState(500);
@@ -320,27 +607,51 @@ export function BillingWorkspace() {
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [services]);
 
+  async function refreshBill(id: string) {
+    const detail = await apiFetch<BillDetail>(`/bills/${id}`);
+    setSavedBill(detail);
+    return detail;
+  }
+
   async function saveBillToServer() {
     if (!patient || lines.length === 0) return;
     setSaving(true);
     setSaveError(null);
     setSaveMessage(null);
+    setFlowError(null);
+    setActionNotice(null);
     try {
-      const bill = await apiFetch<BillCreated>("/bills/create", {
+      const body: Record<string, unknown> = {
+        patientId: patient.id,
+        items: lines.map((l) => ({ serviceId: l.serviceId, qty: l.qty })),
+      };
+      if (appliedDiscountAmount !== null) {
+        if (discountMode === "percent") {
+          body.discountPercent = percentDiscount;
+        } else {
+          body.discountAmount = toMoneyString(appliedDiscount);
+        }
+      }
+      const rawCash = insuranceCashback + loyaltyReward + promoAmount;
+      const cappedCash = Math.min(rawCash, updatedAfterDiscount);
+      if (cappedCash > 0) {
+        body.cashbackAmount = toMoneyString(cappedCash);
+      }
+
+      const created = await apiFetch<BillDetail>("/bills/create", {
         method: "POST",
-        body: JSON.stringify({
-          patientId: patient.id,
-          items: lines.map((l) => ({ serviceId: l.serviceId, qty: l.qty })),
-        }),
+        body: JSON.stringify(body),
       });
-      const serverTotal = parsePrice(bill.totalAmount);
+      await refreshBill(created.id);
+      const serverTotal = parsePrice(created.totalAmount);
+      const serverFinal = parsePrice(created.finalAmount);
       if (Math.abs(serverTotal - subtotal) < 0.01) {
         setSaveMessage(
-          `Bill saved. ID ${bill.id}. Total ${formatInr(serverTotal)} (matches subtotal).`,
+          `Bill saved. Final ${formatInr(serverFinal)} (subtotal ${formatInr(serverTotal)} matches editor).`,
         );
       } else {
         setSaveMessage(
-          `Bill saved. ID ${bill.id}. Server total ${formatInr(serverTotal)}; UI subtotal ${formatInr(subtotal)}.`,
+          `Bill saved. Server subtotal ${formatInr(serverTotal)}; editor subtotal ${formatInr(subtotal)}.`,
         );
       }
     } catch (e) {
@@ -350,7 +661,101 @@ export function BillingWorkspace() {
     }
   }
 
+  async function handleVerify() {
+    if (!savedBill?.id) return;
+    setFlowError(null);
+    setActionNotice(null);
+    setVerifyLoading(true);
+    try {
+      const res = await apiFetch<{
+        notifications?: VerifyNotification[];
+      }>("/bills/verify", {
+        method: "POST",
+        body: JSON.stringify({ billId: savedBill.id }),
+      });
+      await refreshBill(savedBill.id);
+      setVerifyModalNotifications(res.notifications ?? []);
+      setVerifyModalOpen(true);
+    } catch (e) {
+      setFlowError(e instanceof ApiError ? e.message : "Verify failed");
+    } finally {
+      setVerifyLoading(false);
+    }
+  }
+
+  async function handleApprove() {
+    if (!savedBill?.id) return;
+    setFlowError(null);
+    setActionNotice(null);
+    setApproveLoading(true);
+    try {
+      await apiFetch("/bills/approve", {
+        method: "POST",
+        body: JSON.stringify({ billId: savedBill.id }),
+      });
+      await refreshBill(savedBill.id);
+      setActionNotice("Insurer approval recorded. You can run settlement.");
+    } catch (e) {
+      setFlowError(e instanceof ApiError ? e.message : "Approval failed");
+    } finally {
+      setApproveLoading(false);
+    }
+  }
+
+  async function handleInstantSettlement() {
+    if (!savedBill?.id) return;
+    setFlowError(null);
+    setActionNotice(null);
+    setInstantLoading(true);
+    try {
+      const res = await apiFetch<{ message?: string }>("/settlement/instant", {
+        method: "POST",
+        body: JSON.stringify({ billId: savedBill.id }),
+      });
+      await refreshBill(savedBill.id);
+      setActionNotice(res.message ?? "Instant settlement completed.");
+    } catch (e) {
+      setFlowError(
+        e instanceof ApiError ? e.message : "Instant settlement failed",
+      );
+    } finally {
+      setInstantLoading(false);
+    }
+  }
+
+  async function handleExpeditedSettlement() {
+    if (!savedBill?.id) return;
+    setFlowError(null);
+    setActionNotice(null);
+    setExpeditedLoading(true);
+    try {
+      const res = await apiFetch<{ message?: string }>("/settlement/expedited", {
+        method: "POST",
+        body: JSON.stringify({ billId: savedBill.id }),
+      });
+      await refreshBill(savedBill.id);
+      setActionNotice(res.message ?? "Expedited settlement queued.");
+    } catch (e) {
+      setFlowError(
+        e instanceof ApiError ? e.message : "Expedited settlement failed",
+      );
+    } finally {
+      setExpeditedLoading(false);
+    }
+  }
+
   const selectedSvc = services.find((s) => s.id === selectedServiceId);
+
+  const verifyDisabled =
+    !savedBill || savedBill.status !== "draft";
+  const instantDisabled =
+    !savedBill ||
+    savedBill.status !== "verified" ||
+    Boolean(savedBill.settlements?.some((s) => s.type === "instant"));
+  const expeditedDisabled =
+    !savedBill ||
+    savedBill.status !== "verified" ||
+    Boolean(savedBill.settlements?.some((s) => s.type === "expedited"));
 
   if (!patient) {
     return (
@@ -379,6 +784,11 @@ export function BillingWorkspace() {
             setSelectedServiceId("");
             setSaveMessage(null);
             setSaveError(null);
+            setSavedBill(null);
+            setFlowError(null);
+            setActionNotice(null);
+            setVerifyModalOpen(false);
+            setVerifyModalNotifications([]);
           }}
           className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
@@ -843,9 +1253,41 @@ export function BillingWorkspace() {
         )}
       </div>
 
+      {savedBill && (
+        <div className="mt-10 space-y-3">
+          <BillSummaryPanel
+            bill={savedBill}
+            onApprove={() => void handleApprove()}
+            approving={approveLoading}
+            flowError={flowError}
+          />
+          {actionNotice && (
+            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+              {actionNotice}
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="mt-10">
-        <FooterActions />
+        <FooterActions
+          onVerify={() => void handleVerify()}
+          verifyLoading={verifyLoading}
+          verifyDisabled={verifyDisabled}
+          onInstant={() => void handleInstantSettlement()}
+          instantLoading={instantLoading}
+          instantDisabled={instantDisabled}
+          onExpedited={() => void handleExpeditedSettlement()}
+          expeditedLoading={expeditedLoading}
+          expeditedDisabled={expeditedDisabled}
+        />
       </div>
+
+      <MockVerifyModal
+        open={verifyModalOpen}
+        notifications={verifyModalNotifications}
+        onClose={() => setVerifyModalOpen(false)}
+      />
 
       {tab === "billing" && selectedSvc && (
         <p className="mt-6 text-center text-[11px] text-slate-400">

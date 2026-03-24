@@ -139,6 +139,7 @@ export class BillingService {
         hospital: true,
         cashier: true,
         payments: true,
+        settlements: true,
       },
     });
     if (!bill) {
@@ -147,7 +148,9 @@ export class BillingService {
     return bill;
   }
 
-  /** Placeholder: enqueue verification (WhatsApp / email) when integrated. */
+  /**
+   * Draft → pending_verification. Returns mock email/WhatsApp payloads for demo UI.
+   */
   async verify(billId: string, cashier: RequestCashier) {
     const bill = await this.findOne(billId, cashier);
     if (bill.status !== 'draft') {
@@ -155,10 +158,40 @@ export class BillingService {
     }
     bill.status = 'pending_verification';
     await this.bills.save(bill);
+    const patient = bill.patient;
+    const nameSlug = (patient?.name ?? 'patient')
+      .toLowerCase()
+      .replace(/\s+/g, '.')
+      .replace(/[^a-z0-9.]/g, '')
+      .slice(0, 32);
+    const shortId = bill.id.replace(/-/g, '').slice(0, 8);
+    const tail = patient?.id.replace(/-/g, '').slice(-2) ?? '00';
+    const mockEmail = `${nameSlug || 'patient'}.${shortId}@notify.insurexp.demo`;
+    const mockWhatsapp = `+91 •••• ••${shortId.slice(-2)}${tail}`;
+    const sentAt = new Date().toISOString();
     return {
       billId: bill.id,
       status: bill.status,
-      message: 'Verification requested (integration pending)',
+      message: 'Verification requested — mock notifications dispatched',
+      notifications: [
+        { channel: 'email' as const, to: mockEmail, sentAt },
+        { channel: 'whatsapp' as const, to: mockWhatsapp, sentAt },
+      ],
+    };
+  }
+
+  /** pending_verification → verified (demo insurer approval). */
+  async approve(billId: string, cashier: RequestCashier) {
+    const bill = await this.findOne(billId, cashier);
+    if (bill.status !== 'pending_verification') {
+      throw new BadRequestException('Bill is not awaiting verification');
+    }
+    bill.status = 'verified';
+    await this.bills.save(bill);
+    return {
+      billId: bill.id,
+      status: bill.status,
+      message: 'Insurer approval simulated',
     };
   }
 
