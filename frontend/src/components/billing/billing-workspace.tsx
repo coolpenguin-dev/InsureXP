@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type BillingTab = "billing" | "discount" | "cashback" | "split";
 
@@ -151,6 +151,10 @@ export function BillingWorkspace() {
   const [discountMode, setDiscountMode] = useState<"fixed" | "percent">("fixed");
   const [fixedDiscount, setFixedDiscount] = useState(500);
   const [percentDiscount, setPercentDiscount] = useState(10);
+  const [discountApplyFeedback, setDiscountApplyFeedback] = useState<{
+    tone: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const [insuranceCashback, setInsuranceCashback] = useState(200);
   const [loyaltyReward, setLoyaltyReward] = useState(150);
@@ -164,12 +168,36 @@ export function BillingWorkspace() {
     [lines],
   );
 
-  const discountApplied =
+  useEffect(() => {
+    setDiscountApplyFeedback(null);
+  }, [subtotal]);
+
+  const proposedDiscount =
     discountMode === "fixed"
-      ? Math.min(fixedDiscount, subtotal)
+      ? fixedDiscount
       : Math.round((subtotal * percentDiscount) / 100);
 
+  const discountApplied = proposedDiscount;
+
   const updatedAfterDiscount = Math.max(0, subtotal - discountApplied);
+
+  function clearDiscountApplyFeedback() {
+    setDiscountApplyFeedback(null);
+  }
+
+  function handleApplyDiscount() {
+    if (proposedDiscount > subtotal) {
+      setDiscountApplyFeedback({
+        tone: "error",
+        message: "Discount cannot exceed the subtotal. Lower the discount and try again.",
+      });
+      return;
+    }
+    setDiscountApplyFeedback({
+      tone: "success",
+      message: "Discount applied successfully.",
+    });
+  }
   const netPayable = Math.max(
     0,
     updatedAfterDiscount - insuranceCashback - loyaltyReward - promoAmount,
@@ -313,7 +341,10 @@ export function BillingWorkspace() {
                   type="number"
                   min={0}
                   value={fixedDiscount}
-                  onChange={(e) => setFixedDiscount(Number(e.target.value) || 0)}
+                  onChange={(e) => {
+                    clearDiscountApplyFeedback();
+                    setFixedDiscount(Number(e.target.value) || 0);
+                  }}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
                 <p className="mt-1 text-xs text-slate-500">Flat amount off total</p>
@@ -327,7 +358,10 @@ export function BillingWorkspace() {
                   min={0}
                   max={100}
                   value={percentDiscount}
-                  onChange={(e) => setPercentDiscount(Number(e.target.value) || 0)}
+                  onChange={(e) => {
+                    clearDiscountApplyFeedback();
+                    setPercentDiscount(Number(e.target.value) || 0);
+                  }}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
                 <p className="mt-1 text-xs text-slate-500">Percentage of subtotal</p>
@@ -336,7 +370,10 @@ export function BillingWorkspace() {
             <div className="flex gap-2 text-sm">
               <button
                 type="button"
-                onClick={() => setDiscountMode("fixed")}
+                onClick={() => {
+                  clearDiscountApplyFeedback();
+                  setDiscountMode("fixed");
+                }}
                 className={`rounded-lg px-3 py-1.5 font-medium ${
                   discountMode === "fixed"
                     ? "bg-indigo-600 text-white"
@@ -348,7 +385,10 @@ export function BillingWorkspace() {
               <span className="self-center text-slate-400">|</span>
               <button
                 type="button"
-                onClick={() => setDiscountMode("percent")}
+                onClick={() => {
+                  clearDiscountApplyFeedback();
+                  setDiscountMode("percent");
+                }}
                 className={`rounded-lg px-3 py-1.5 font-medium ${
                   discountMode === "percent"
                     ? "bg-indigo-600 text-white"
@@ -370,11 +410,36 @@ export function BillingWorkspace() {
               <div className="border-t border-slate-200 pt-2" />
               <div className="flex justify-between text-base font-semibold">
                 <span className="text-slate-800">Updated Total</span>
-                <span className="text-emerald-600">{formatInr(updatedAfterDiscount)}</span>
+                <span
+                  className={
+                    proposedDiscount > subtotal ? "text-rose-600" : "text-emerald-600"
+                  }
+                >
+                  {formatInr(updatedAfterDiscount)}
+                </span>
               </div>
+              {proposedDiscount > subtotal && (
+                <p className="text-xs font-medium text-rose-600">
+                  Discount is larger than the subtotal — apply will fail until you reduce it.
+                </p>
+              )}
             </div>
+            {discountApplyFeedback && (
+              <p
+                role="status"
+                aria-live="polite"
+                className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                  discountApplyFeedback.tone === "success"
+                    ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
+                    : "bg-rose-50 text-rose-800 ring-1 ring-rose-200"
+                }`}
+              >
+                {discountApplyFeedback.message}
+              </p>
+            )}
             <button
               type="button"
+              onClick={handleApplyDiscount}
               className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 sm:w-auto sm:px-10"
             >
               ✅ Apply Discount
