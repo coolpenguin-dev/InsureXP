@@ -41,8 +41,23 @@ export class Bill {
   @JoinColumn({ name: 'cashier_id' })
   cashier: Cashier;
 
+  /** Sum of line items before discount or cashback (gross subtotal). */
   @Column({ name: 'total_amount', type: 'decimal', precision: 14, scale: 2, default: 0 })
   totalAmount: string;
+
+  @Column({ name: 'discount_amount', type: 'decimal', precision: 14, scale: 2, default: 0 })
+  discountAmount: string;
+
+  @Column({ name: 'cashback_amount', type: 'decimal', precision: 14, scale: 2, default: 0 })
+  cashbackAmount: string;
+
+  /** Amount due after discount and cashback (before payment is recorded). */
+  @Column({ name: 'final_amount', type: 'decimal', precision: 14, scale: 2, default: 0 })
+  finalAmount: string;
+
+  /** Set when the bill is paid: cash | insurance | split */
+  @Column({ name: 'payment_mode', type: 'varchar', length: 32, nullable: true })
+  paymentMode: string | null;
 
   @Column({ type: 'varchar', length: 32, default: 'draft' })
   status: string;

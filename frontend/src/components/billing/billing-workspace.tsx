@@ -302,7 +302,7 @@ export function BillingWorkspace() {
         {tab === "discount" && (
           <div className="space-y-6">
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/80 px-4 py-3 text-sm font-semibold text-indigo-900">
-              ☑ Apply Discount %
+              Apply Discount %
             </div>
             <div className="grid gap-6 sm:grid-cols-2">
               <div>
